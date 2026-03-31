@@ -1,0 +1,17 @@
+# =============================================================================
+# GCS Backend Configuration — REQUIRED for shared/multi-machine use
+# =============================================================================
+# Copy this file to backend.tf and fill in your bucket name.
+# Then run: terraform init (it will prompt to migrate state if .tfstate exists)
+#
+# IMPORTANT: Never commit backend.tf to version control with real values.
+# Use .gitignore to exclude it, or use a remote backend that supports
+# secret management.
+# =============================================================================
+
+terraform {
+  backend "gcs" {
+    bucket = "your-terraform-state-bucket-name"   # create with: gsutil mb -l us-central1 gs://your-bucket-name
+    prefix = "postgres/state"                      # optional: namespaced path in the bucket
+  }
+}

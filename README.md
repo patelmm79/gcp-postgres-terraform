@@ -220,3 +220,161 @@ This is part of [dev-nexus](https://github.com/patelmm79/dev-nexus). Issues and 
 ## License
 
 MIT
+
+---
+
+## Integration with Application Repos
+
+This module is designed to be consumed as a **Git source module** by application repos. No code copying required — reference the module by tag, pin a version, and evolve independently.
+
+### Module Source
+
+```hcl
+module "postgres" {
+  source = "github.com/patelmm79/gcp-postgres-terraform//terraform?ref=v1.0"
+
+  project_id             = "my-gcp-project"
+  instance_name          = "my-db"
+  postgres_db_name       = "my-db"
+  postgres_db_user       = "my-db-user"
+  postgres_db_password   = var.db_password   # from secrets manager or env
+
+  # Optional: inject app-specific schema at provision time
+  init_sql = file("${path.module}/../schemas/my-app-schema.sql")
+}
+```
+
+> **Version pinning:** Use `?ref=v1.0` (or any git tag). Update by bumping the tag ref and running `terraform apply`. Never reference a branch (`main`) directly — branch history is mutable and can break your infrastructure silently.
+
+### Required Variables
+
+| Variable | Type | Description |
+|----------|------|-------------|
+| `project_id` | string | GCP project ID |
+| `instance_name` | string | Unique name for all resources (lowercase, hyphens only) |
+| `postgres_db_password` | string | Database password (store in Secret Manager, reference via `var`) |
+
+### Optional Variables (commonly overridden)
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `postgres_db_name` | `"postgres"` | Database name |
+| `postgres_db_user` | `"postgres"` | Database user |
+| `postgres_version` | `"15"` | PostgreSQL version (14/15/16) |
+| `machine_type` | `"e2-micro"` | VM machine type |
+| `region` | `"us-central1"` | GCP region |
+| `disk_size_gb` | `30` | Persistent disk size |
+| `pgvector_enabled` | `true` | Enable pgvector extension |
+| `init_sql` | `""` | SQL to run on DB init (schema injection) |
+| `vpc_name` | `""` | Use existing VPC instead of creating new one |
+
+### Terraform Outputs (for Application Integration)
+
+After `terraform apply`, these outputs are used by the application:
+
+| Output | Usage |
+|--------|-------|
+| `internal_ip` | `DB_HOST` environment variable for Cloud Run / Cloud Functions |
+| `vpc_connector_name` | `VPC_CONNECTOR_NAME` — attach to Cloud Run for internal networking |
+| `connection_string_internal` | Full connection URI for internal VPC access |
+| `secrets` | Secret Manager IDs for `DB_PASSWORD`, `DB_USER`, `DB_HOST` |
+| `backup_bucket_name` | GCS bucket for backup verification |
+
+### Setting Up Terraform State (Required Before Use)
+
+Terraform state must be stored in GCS to be shared across machines and to prevent state loss. Create the bucket first, then configure:
+
+```bash
+# Create the state bucket (one-time)
+gsutil mb -l us-central1 gs://my-terraform-state-bucket
+
+# Add backend config to your calling terraform config:
+# terraform/backend.tf
+terraform {
+  backend "gcs" {
+    bucket = "my-terraform-state-bucket"
+    prefix = "postgres/state"
+  }
+}
+```
+
+Then run `terraform init` — it will prompt to migrate state if a local `.tfstate` exists.
+
+### Schema Injection Pattern
+
+To inject your application schema at provision time (recommended — no manual `psql` step):
+
+```hcl
+module "postgres" {
+  source = "github.com/patelmm79/gcp-postgres-terraform//terraform?ref=v1.0"
+  # ...
+  init_sql = file("${path.module}/../schemas/app-schema.sql")
+}
+```
+
+Your `schemas/app-schema.sql` should include:
+- Table creation
+- Row-Level Security (RLS) policies
+- Index creation
+- Any initial data
+
+The SQL runs as the `postgres` superuser on first boot. Do not include `CREATE EXTENSION` statements for `vector` here — use `pgvector_enabled = true` instead (handled separately by the module).
+
+### Schema Injection via Terraform Apply
+
+If your schema changes after initial provisioning, run manually:
+
+```bash
+# Get the internal IP
+INTERNAL_IP=$(terraform output -raw internal_ip)
+
+# Apply schema update
+psql -h $INTERNAL_IP -U postgres -d my-db -f schemas/app-schema.sql
+```
+
+Schema changes should be managed with a migration tool (e.g., `Flyway`, `Alembic`) in production — the `init_sql` variable only runs on first boot.
+
+### Managing Module Updates
+
+| Scenario | Action |
+|---------|--------|
+| Bug fix in module | `terraform apply` after `terraform get -u` |
+| Pin to specific version | Change `?ref=v1.0` → `?ref=v1.1`, then `terraform apply` |
+| GCP API breaking change | Pin to old version, update app repo separately |
+| New region needed | Update `region` var, `terraform apply` |
+| Postgres version upgrade | Update `postgres_version`, `terraform apply` (VM recreation required) |
+
+### Tagging Releases
+
+After any meaningful change to the module, tag a new version:
+
+```bash
+git tag -a v1.1 -m "Add disk usage alert threshold, update Ubuntu to 22.04"
+git push origin v1.1
+```
+
+Use [Semantic Versioning](https://semver.org/):
+- `v1.0` — initial stable release
+- `v1.1` — backward-compatible additions (new outputs, new optional vars)
+- `v2.0` — breaking changes (renamed vars, removed outputs, changed defaults)
+
+### Migrating from Local State to GCS
+
+If you already have local `.tfstate` files:
+
+```bash
+# 1. Add the GCS backend to your terraform block
+terraform {
+  backend "gcs" {
+    bucket = "my-terraform-state-bucket"
+    prefix = "postgres/state"
+  }
+}
+
+# 2. Initialize — Terraform will prompt to migrate
+terraform init
+
+# 3. Confirm migration (type 'yes')
+```
+
+This is a one-time operation. After migration, delete local `.tfstate` files.
