@@ -365,6 +365,7 @@ resource "google_compute_instance" "postgres" {
     shared_buffers    = var.shared_buffers
     work_mem          = var.work_mem
     maintenance_work_mem = var.maintenance_work_mem
+    retry_delay       = "2"
   })
 
   service_account {
