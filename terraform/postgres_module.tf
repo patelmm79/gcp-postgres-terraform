@@ -42,6 +42,7 @@ resource "google_project_service" "secretmanager" {
 # =============================================================================
 
 resource "google_compute_network" "postgres_network" {
+  project                 = var.project_id
   name                    = var.vpc_name != "" ? var.vpc_name : "pg-${var.instance_name}-vpc"
   auto_create_subnetworks = false
   depends_on              = [google_project_service.compute]
@@ -423,7 +424,8 @@ resource "google_compute_instance" "postgres" {
 
 resource "google_compute_resource_policy" "postgres_snapshot_policy" {
   project = var.project_id
-  name        = "pg-${var.instance_name}-snapshots"
+  region   = var.region
+  name     = "pg-${var.instance_name}-snapshots"
   description = "Daily snapshots of PostgreSQL data disk"
 
   snapshot_schedule_policy {
