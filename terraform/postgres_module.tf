@@ -449,9 +449,10 @@ resource "google_compute_resource_policy" "postgres_snapshot_policy" {
 }
 
 resource "google_compute_disk_resource_policy_attachment" "postgres_snapshots" {
-  name = google_compute_resource_policy.postgres_snapshot_policy.name
-  disk = google_compute_disk.postgres_data.name
-  zone = var.zone
+  project = var.project_id
+  name    = google_compute_resource_policy.postgres_snapshot_policy.name
+  disk    = google_compute_disk.postgres_data.name
+  zone    = var.zone
 }
 
 # =============================================================================
@@ -459,7 +460,8 @@ resource "google_compute_disk_resource_policy_attachment" "postgres_snapshots" {
 # =============================================================================
 
 resource "google_monitoring_dashboard" "postgres" {
-  count = var.enable_monitoring ? 1 : 0
+  project = var.project_id
+  count   = var.enable_monitoring ? 1 : 0
 
   dashboard_json = jsonencode({
     displayName = "PostgreSQL Dashboard - ${var.instance_name}"
@@ -509,6 +511,7 @@ resource "google_monitoring_dashboard" "postgres" {
 }
 
 resource "google_monitoring_alert_policy" "postgres_disk_usage" {
+  project      = var.project_id
   count        = var.enable_monitoring && length(var.alert_notification_channels) > 0 ? 1 : 0
   display_name = "PostgreSQL Disk Usage High - ${var.instance_name}"
   combiner     = "OR"
