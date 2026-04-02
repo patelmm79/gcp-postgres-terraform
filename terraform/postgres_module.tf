@@ -121,7 +121,6 @@ resource "google_compute_firewall" "allow_egress" {
 
 resource "google_compute_router" "postgres_router" {
   project = var.project_id
-  project = var.project_id
   count   = var.enable_cloud_nat ? 1 : 0
   name    = "pg-${var.instance_name}-router"
   region  = var.region
@@ -131,7 +130,6 @@ resource "google_compute_router" "postgres_router" {
 }
 
 resource "google_compute_router_nat" "postgres_nat" {
-  project = var.project_id
   project = var.project_id
   count  = var.enable_cloud_nat ? 1 : 0
   name   = "pg-${var.instance_name}-nat"
