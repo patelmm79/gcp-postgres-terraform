@@ -14,21 +14,25 @@
 
 # Enable required GCP APIs
 resource "google_project_service" "compute" {
+  project            = var.project_id
   service            = "compute.googleapis.com"
   disable_on_destroy = false
 }
 
 resource "google_project_service" "servicenetworking" {
+  project            = var.project_id
   service            = "servicenetworking.googleapis.com"
   disable_on_destroy = false
 }
 
 resource "google_project_service" "vpcaccess" {
+  project            = var.project_id
   service            = "vpcaccess.googleapis.com"
   disable_on_destroy = false
 }
 
 resource "google_project_service" "secretmanager" {
+  project            = var.project_id
   service            = "secretmanager.googleapis.com"
   disable_on_destroy = false
 }
@@ -44,6 +48,7 @@ resource "google_compute_network" "postgres_network" {
 }
 
 resource "google_compute_subnetwork" "postgres_subnet" {
+  project = var.project_id
   name          = "pg-${var.instance_name}-subnet"
   ip_cidr_range = var.subnet_cidr
   region        = var.region
@@ -61,6 +66,7 @@ resource "google_compute_subnetwork" "postgres_subnet" {
 # =============================================================================
 
 resource "google_compute_firewall" "allow_postgres" {
+  project = var.project_id
   name    = "pg-${var.instance_name}-allow-postgres"
   network = google_compute_network.postgres_network.name
 
@@ -78,6 +84,7 @@ resource "google_compute_firewall" "allow_postgres" {
 }
 
 resource "google_compute_firewall" "allow_ssh" {
+  project = var.project_id
   count   = length(var.allow_ssh_from_cidrs) > 0 ? 1 : 0
   name    = "pg-${var.instance_name}-allow-ssh"
   network = google_compute_network.postgres_network.name
@@ -92,6 +99,7 @@ resource "google_compute_firewall" "allow_ssh" {
 }
 
 resource "google_compute_firewall" "allow_egress" {
+  project = var.project_id
   count  = var.enable_cloud_nat ? 1 : 0
   name   = "pg-${var.instance_name}-allow-egress"
   network = google_compute_network.postgres_network.name
@@ -111,6 +119,7 @@ resource "google_compute_firewall" "allow_egress" {
 # =============================================================================
 
 resource "google_compute_router" "postgres_router" {
+  project = var.project_id
   count   = var.enable_cloud_nat ? 1 : 0
   name    = "pg-${var.instance_name}-router"
   region  = var.region
@@ -120,6 +129,7 @@ resource "google_compute_router" "postgres_router" {
 }
 
 resource "google_compute_router_nat" "postgres_nat" {
+  project = var.project_id
   count  = var.enable_cloud_nat ? 1 : 0
   name   = "pg-${var.instance_name}-nat"
   router = google_compute_router.postgres_router[0].name
@@ -144,6 +154,7 @@ resource "google_compute_router_nat" "postgres_nat" {
 # =============================================================================
 
 resource "google_vpc_access_connector" "postgres_connector" {
+  project = var.project_id
   name          = "pg-${var.instance_name}-connector"
   region        = var.region
   network       = google_compute_network.postgres_network.name
@@ -162,6 +173,7 @@ resource "google_vpc_access_connector" "postgres_connector" {
 # =============================================================================
 
 resource "google_storage_bucket" "postgres_backups" {
+  project = var.project_id
   name     = var.backup_bucket_name != "" ? var.backup_bucket_name : "pg-${var.instance_name}-backups-${var.project_id}"
   location = var.region
   force_destroy = true
@@ -196,6 +208,7 @@ resource "google_storage_bucket" "postgres_backups" {
 # =============================================================================
 
 resource "google_compute_disk" "postgres_data" {
+  project = var.project_id
   name  = "pg-${var.instance_name}-data"
   type  = var.disk_type
   zone  = var.zone
@@ -212,6 +225,7 @@ resource "google_compute_disk" "postgres_data" {
 # =============================================================================
 
 resource "google_compute_address" "postgres_ip" {
+  project = var.project_id
   name         = "pg-${var.instance_name}-ip"
   address_type = "INTERNAL"
   subnetwork   = google_compute_subnetwork.postgres_subnet.id
@@ -219,6 +233,7 @@ resource "google_compute_address" "postgres_ip" {
 }
 
 resource "google_compute_address" "postgres_external_ip" {
+  project = var.project_id
   count        = var.assign_external_ip ? 1 : 0
   name         = "pg-${var.instance_name}-external-ip"
   address_type = "EXTERNAL"
@@ -231,6 +246,7 @@ resource "google_compute_address" "postgres_external_ip" {
 # =============================================================================
 
 resource "google_service_account" "postgres_vm" {
+  project = var.project_id
   account_id   = "pg-${var.instance_name}-vm"
   display_name = "PostgreSQL VM - ${var.instance_name}"
   description  = "Service account for PostgreSQL VM ${var.instance_name}"
@@ -253,6 +269,7 @@ resource "google_storage_bucket_iam_member" "postgres_backup_reader" {
 # =============================================================================
 
 resource "google_secret_manager_secret" "postgres_password" {
+  project = var.project_id
   secret_id = "${var.instance_name}_POSTGRES_PASSWORD"
   replication {
     auto {}
@@ -266,6 +283,7 @@ resource "google_secret_manager_secret_version" "postgres_password" {
 }
 
 resource "google_secret_manager_secret" "postgres_user" {
+  project = var.project_id
   secret_id = "${var.instance_name}_POSTGRES_USER"
   replication {
     auto {}
@@ -279,6 +297,7 @@ resource "google_secret_manager_secret_version" "postgres_user" {
 }
 
 resource "google_secret_manager_secret" "postgres_db" {
+  project = var.project_id
   secret_id = "${var.instance_name}_POSTGRES_DB"
   replication {
     auto {}
@@ -292,6 +311,7 @@ resource "google_secret_manager_secret_version" "postgres_db" {
 }
 
 resource "google_secret_manager_secret" "postgres_host" {
+  project = var.project_id
   secret_id = "${var.instance_name}_POSTGRES_HOST"
   replication {
     auto {}
@@ -315,6 +335,7 @@ resource "google_secret_manager_secret_iam_member" "postgres_vm_secret_access" {
 # =============================================================================
 
 resource "google_compute_instance" "postgres" {
+  project = var.project_id
   name         = "pg-${var.instance_name}"
   machine_type = var.machine_type
   zone         = var.zone
@@ -401,6 +422,7 @@ resource "google_compute_instance" "postgres" {
 # =============================================================================
 
 resource "google_compute_resource_policy" "postgres_snapshot_policy" {
+  project = var.project_id
   name        = "pg-${var.instance_name}-snapshots"
   description = "Daily snapshots of PostgreSQL data disk"
 
